@@ -1,4 +1,5 @@
 version: '3.8'
+
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.1
@@ -33,9 +34,20 @@ services:
     environment:
       discovery.type: "single-node"
       plugins.security.disabled: "true"
+      # Memory settings - limit OpenSearch memory usage
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      # Disk watermark settings - control when read-only mode kicks in
+      cluster.routing.allocation.disk.watermark.low: "90%"
+      cluster.routing.allocation.disk.watermark.high: "95%"
+      cluster.routing.allocation.disk.watermark.flood_stage: "98%"
+      # Reduce shard count to save space
+      indices.query.bool.max_clause_count: "1024"
     ports:
       - "9200:9200"
       - "9600:9600"
+    # Add volume to persist data
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
     networks:
       - news-network
 
@@ -63,6 +75,11 @@ services:
       - kafka
     networks:
       - news-network
+
+# Define volumes
+volumes:
+  opensearch-data:
+    driver: local
 
 networks:
   news-network:

@@ -34,6 +34,11 @@ public class NewsOpenSearchRepository {
     @ConfigProperty(name = "news.opensearch.index", defaultValue = "news-articles")
     String indexName;
 
+    // Umang index ke liye separate property
+    private static final String UMANG_INDEX = "npi_umang_services_department_by_all_services";
+
+    // ========== NEWS INDEX METHODS (Existing) ==========
+
     public void ensureIndexExists() {
         try {
             Request headRequest = new Request("HEAD", "/" + indexName);
@@ -73,7 +78,7 @@ public class NewsOpenSearchRepository {
         for (NewsArticle article : articles) {
             try {
                 bulk.append("{\"index\":{\"_index\":\"").append(indexName)
-                    .append("\",\"_id\":\"").append(article.getId()).append("\"}}\n");
+                        .append("\",\"_id\":\"").append(article.getId()).append("\"}}\n");
                 bulk.append(objectMapper.writeValueAsString(article)).append("\n");
             } catch (IOException e) {
                 LOG.warnf(e, "Skipping article id=%s", article.getId());
@@ -94,7 +99,7 @@ public class NewsOpenSearchRepository {
             String queryJson = buildSearchQuery(req);
             int from = req.getPage() * req.getSize();
             Request request = new Request("POST",
-                "/" + indexName + "/_search?from=" + from + "&size=" + req.getSize());
+                    "/" + indexName + "/_search?from=" + from + "&size=" + req.getSize());
             request.setJsonEntity(queryJson);
             Response response = restClient.performRequest(request);
             return parseSearchResponse(response, req.getPage(), req.getSize());
@@ -116,6 +121,55 @@ public class NewsOpenSearchRepository {
             return List.of();
         }
     }
+
+    // ========== UMANG SERVICES METHODS (New) ==========
+
+    public String searchUmangServices(String query, int size, int from) {
+        try {
+            String searchQuery;
+            if (query != null && !query.isEmpty()) {
+                searchQuery = "{\"query\":{\"query_string\":{\"query\":\"" + query + "\"}},\"from\":" + from + ",\"size\":" + size + "}";
+            } else {
+                searchQuery = "{\"query\":{\"match_all\":{}},\"from\":" + from + ",\"size\":" + size + "}";
+            }
+
+            Request request = new Request("GET", "/" + UMANG_INDEX + "/_search");
+            request.setJsonEntity(searchQuery);
+            Response response = restClient.performRequest(request);
+
+            try (InputStream is = response.getEntity().getContent()) {
+                return new String(is.readAllBytes());
+            }
+        } catch (IOException e) {
+            LOG.errorf(e, "Umang search failed");
+            return "{\"error\":\"" + e.getMessage() + "\"}";
+        }
+    }
+
+    public String getUmangCount() {
+        try {
+            Request request = new Request("GET", "/" + UMANG_INDEX + "/_count");
+            Response response = restClient.performRequest(request);
+            try (InputStream is = response.getEntity().getContent()) {
+                return new String(is.readAllBytes());
+            }
+        } catch (IOException e) {
+            LOG.errorf(e, "Failed to get Umang count");
+            return "{\"error\":\"" + e.getMessage() + "\"}";
+        }
+    }
+
+    public boolean umangIndexExists() {
+        try {
+            Request request = new Request("HEAD", "/" + UMANG_INDEX);
+            Response response = restClient.performRequest(request);
+            return response.getStatusLine().getStatusCode() == 200;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    // ========== EXISTING PRIVATE METHODS (Unchanged) ==========
 
     private String buildSearchQuery(NewsSearchRequest req) throws IOException {
         ObjectNode root = objectMapper.createObjectNode();
@@ -194,19 +248,19 @@ public class NewsOpenSearchRepository {
 
     private String buildIndexMapping() {
         return "{\"settings\":{\"number_of_shards\":1,\"number_of_replicas\":0}," +
-               "\"mappings\":{\"properties\":{" +
-               "\"id\":{\"type\":\"keyword\"}," +
-               "\"title\":{\"type\":\"text\"}," +
-               "\"description\":{\"type\":\"text\"}," +
-               "\"content\":{\"type\":\"text\"}," +
-               "\"url\":{\"type\":\"keyword\"}," +
-               "\"publishedAt\":{\"type\":\"date\"}," +
-               "\"indexedAt\":{\"type\":\"date\"}," +
-               "\"sourceName\":{\"type\":\"keyword\"}," +
-               "\"provider\":{\"type\":\"keyword\"}," +
-               "\"category\":{\"type\":\"keyword\"}," +
-               "\"country\":{\"type\":\"keyword\"}," +
-               "\"language\":{\"type\":\"keyword\"}" +
-               "}}}";
+                "\"mappings\":{\"properties\":{" +
+                "\"id\":{\"type\":\"keyword\"}," +
+                "\"title\":{\"type\":\"text\"}," +
+                "\"description\":{\"type\":\"text\"}," +
+                "\"content\":{\"type\":\"text\"}," +
+                "\"url\":{\"type\":\"keyword\"}," +
+                "\"publishedAt\":{\"type\":\"date\"}," +
+                "\"indexedAt\":{\"type\":\"date\"}," +
+                "\"sourceName\":{\"type\":\"keyword\"}," +
+                "\"provider\":{\"type\":\"keyword\"}," +
+                "\"category\":{\"type\":\"keyword\"}," +
+                "\"country\":{\"type\":\"keyword\"}," +
+                "\"language\":{\"type\":\"keyword\"}" +
+                "}}}";
     }
 }
